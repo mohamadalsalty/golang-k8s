@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kubernetes Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #mynetwork {
+      width: 100%;
+      height: 600px;
+      border: 1px solid lightgray;
+    }
+    .back-button {
+      margin-top: 10px;
+      padding: 5px 10px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .legend {
+      margin-top: 20px;
+    }
+    .legend-item {
+      margin-right: 20px;
+      display: inline-block;
+    }
+    .legend-item .legend-color {
+      width: 20px;
+      height: 20px;
+      display: inline-block;
+      margin-right: 5px;
+    }
+  </style>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <h1>Kubernetes Namespaces, Deployments, ReplicaSets, and Pods Viewer</h1>
+  <div id="mynetwork"></div>
+  <div class="legend" id="legend"></div>
+  <button class="back-button" onclick="goBack()">Back</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+  <script>
+    const endpointPrefix = ""; // Add your endpoint prefix here
+
+    var historyStack = []; // Stack to store history of nodes and edges
+
+    var nodes = new vis.DataSet(); // Array with nodes
+    var edges = new vis.DataSet(); // Array with edges
+
+    var container = document.getElementById('mynetwork'); // Network container
+    var data = { nodes: nodes, edges: edges }; // Network data
+    var options = {
+      groups: {
+        Deployments: { color: { background: '#4CAF50', border: '#357a38' } }, // Green for Deployments
+        ReplicaSets: { color: { background: '#2196F3', border: '#1a237e' } }, // Blue for ReplicaSets
+        Pods: { color: { background: '#9C27B0', border: '#6a1b9a' } } // Purple for Pods
+      }
+    };
+    var network = new vis.Network(container, data, options); // Create network
+
+    // Fetch and display all namespaces
+    function displayAllNamespaces() {
+      fetch(endpointPrefix + "/namespaces")
+        .then(response => response.json())
+        .then(namespacesData => {
+          nodes.clear(); // Clear existing nodes
+          edges.clear(); // Clear existing edges
+
+          // Add namespaces as nodes
+          const namespaceNodes = namespacesData.namespaces.map((ns, index) => ({
+            id: `ns_${index + 1}`,
+            label: ns.name,
+            level: 2,
+            namespace: ns.name
+          }));
+          nodes.add(namespaceNodes);
+
+          // Add edges from Cluster Info node to Namespaces nodes
+          const clusterInfoNode = { id: 1, label: 'Cluster Info', level: 0 };
+          const namespaceEdges = namespaceNodes.map(node => ({ from: 1, to: node.id }));
+          edges.add(namespaceEdges);
+
+          // Update the network
+          network.setData({ nodes: nodes, edges: edges });
+
+          // Update legend based on current state
+          updateLegend();
+        })
+        .catch(error => console.error("Error fetching namespaces:", error));
+    }
+
+    displayAllNamespaces(); // Call function on page load
+
+    // Handle click events on nodes
+    network.on("click", params => {
+      if (params.nodes.length > 0) {
+        const clickedNodeId = params.nodes[0];
+        const clickedNode = nodes.get(clickedNodeId);
+
+        // Store current state in history stack
+        historyStack.push({ nodes: nodes.get(), edges: edges.get() });
+
+        if (clickedNode.level === 2) {
+          // Fetch deployments, replica sets, and pods concurrently
+          Promise.all([
+            fetch(endpointPrefix + `/deployments/${clickedNode.namespace}`).then(response => response.json()).catch(() => ({ deployments: [] })),
+            fetch(endpointPrefix + `/replicasets/${clickedNode.namespace}`).then(response => response.json()).catch(() => ({ replicaSets: [] })),
+            fetch(endpointPrefix + `/pods/${clickedNode.namespace}`).then(response => response.json()).catch(() => ({ pods: [] }))
+          ])
+          .then(([deploymentsData, replicaSetsData, podsData]) => {
+            // Clear existing nodes and edges except Cluster Info and Namespaces
+            nodes.remove(nodes.get({ filter: node => node.level > 1 }));
+            edges.remove(edges.get());
+
+            // Add nodes for Deployments, ReplicaSets, and Pods
+            const deploymentNodes = deploymentsData.deployments.map((deployment, index) => ({
+              id: `dep_${index + 1}`,
+              label: deployment.name,
+              level: 3,
+              namespace: clickedNode.namespace,
+              group: 'Deployments'
+            }));
+            const replicaSetNodes = replicaSetsData.replicaSets.map((replicaSet, index) => ({
+              id: `rs_${index + 1}`,
+              label: replicaSet.name,
+              level: 3,
+              namespace: clickedNode.namespace,
+              group: 'ReplicaSets'
+            }));
+            const podNodes = podsData.pods.map((pod, index) => ({
+              id: `pod_${index + 1}`,
+              label: pod.name,
+              level: 3,
+              namespace: clickedNode.namespace,
+              group: 'Pods'
+            }));
+
+            nodes.add([...deploymentNodes, ...replicaSetNodes, ...podNodes]);
+
+            // Add edges from Namespace node to Deployment, ReplicaSets, and Pods nodes
+            const deploymentEdges = deploymentNodes.map(node => ({ from: clickedNodeId, to: node.id }));
+            const replicaSetEdges = replicaSetNodes.map(node => ({ from: clickedNodeId, to: node.id }));
+            const podEdges = podNodes.map(node => ({ from: clickedNodeId, to: node.id }));
+            edges.add([...deploymentEdges, ...replicaSetEdges, ...podEdges]);
+
+            network.setData({ nodes: nodes, edges: edges });
+
+            updateLegend();
+          })
+          .catch(error => console.error("Error fetching deployments, replica sets, or pods:", error));
+        }
+      }
+    });
+
+    // Go back to previous state
+    function goBack() {
+      if (historyStack.length > 0) {
+        const lastState = historyStack.pop();
+        nodes.clear();
+        edges.clear();
+        nodes.add(lastState.nodes);
+        edges.add(lastState.edges);
+        network.setData({ nodes: nodes, edges: edges });
+        updateLegend();
+      }
+    }
+
+    // Update legend based on current nodes
+    function updateLegend() {
+      const legendDiv = document.getElementById('legend');
+      legendDiv.innerHTML = ''; // Clear previous legend items
+
+      // Get unique groups from current nodes
+      const groups = new Set(nodes.get().map(node => node.group).filter(group => group));
+
+      groups.forEach(group => {
+        if (network.groups[group]) {
+          const legendItem = document.createElement('div');
+          legendItem.classList.add('legend-item');
+
+          const legendColor = document.createElement('div');
+          legendColor.classList.add('legend-color');
+          legendColor.style.backgroundColor = network.groups[group].color.background;
+          legendItem.appendChild(legendColor);
+
+          const legendText = document.createElement('span');
+          legendText.textContent = group;
+          legendItem.appendChild(legendText);
+
+          legendDiv.appendChild(legendItem);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
