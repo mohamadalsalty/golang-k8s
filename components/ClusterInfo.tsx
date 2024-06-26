@@ -31,9 +31,6 @@ const ClusterInfo: React.FC = () => {
       {clusterInfo ? (
         <div className="bg-gray-200 p-4 rounded">
           <p className="text-lg">
-            <span className="font-bold">Cluster Name:</span> {clusterInfo.name}
-          </p>
-          <p className="text-lg">
             <span className="font-bold">Cluster Version:</span> {clusterInfo.version}
           </p>
         </div>
