@@ -29,7 +29,7 @@ const Pods: React.FC<PodsProps> = ({ namespace }) => {
           setPods([]);
         }
       } catch (error) {
-        console.error('Error fetching replica sets:', error);
+        console.error('Error fetching pods:', error);
         setPods([]);
       }
     };
@@ -47,7 +47,7 @@ const Pods: React.FC<PodsProps> = ({ namespace }) => {
           ))}
         </ul>
       ) : (
-        <p className="text-lg text-gray-500">No replica sets</p>
+        <p className="text-lg text-gray-500">No Pods</p>
       )}
     </div>
   );
