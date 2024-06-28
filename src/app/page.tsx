@@ -5,6 +5,7 @@ import Deployments from '../../components/Deployments';
 import ClusterInfo from '../../components/ClusterInfo';
 import ReplicaSets from '../../components/ReplicaSets';
 import Nodes from '../../components/Nodes';
+import Pods from '../../components/Pods';
 
 
 const Home: React.FC = () => {
@@ -22,6 +23,7 @@ const Home: React.FC = () => {
         <Nodes />
         <Deployments namespace={selectedNamespace} />
         <ReplicaSets namespace={selectedNamespace} />
+        <Pods namespace={selectedNamespace} />
 
       </main>
     </div>

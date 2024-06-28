@@ -39,7 +39,7 @@ const ReplicaSets: React.FC<ReplicaSetsProps> = ({ namespace }) => {
 
   return (
     <div className="p-4">
-      <h2 className="text-2xl font-bold mb-4">Replica Sets: {namespace}</h2>
+      <h2 className="text-2xl font-bold mb-4">Replica Sets:</h2>
       {replicaSets.length > 0 ? (
         <ul className="list-disc list-inside">
           {replicaSets.map((replicaSet, index) => (
@@ -47,7 +47,7 @@ const ReplicaSets: React.FC<ReplicaSetsProps> = ({ namespace }) => {
           ))}
         </ul>
       ) : (
-        <p className="text-lg text-gray-500">No replica sets: {namespace}</p>
+        <p className="text-lg text-gray-500">No replica sets</p>
       )}
     </div>
   );
